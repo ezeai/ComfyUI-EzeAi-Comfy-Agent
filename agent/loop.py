@@ -110,7 +110,8 @@ class Agent:
                 {"role": "system", "content": "You describe images precisely for another assistant. "
                                               "Be concrete and brief; list visible problems."},
                 {"role": "user", "content": question, "images": [b64]}],
-                cancel=self.cancel, options={"keep_alive": "60s", "think": False})
+                cancel=self.cancel,
+                options={"keep_alive": 0 if load_settings()["offload_between_steps"] else "60s", "think": False})
             return reply["content"].strip()
         return describe
 

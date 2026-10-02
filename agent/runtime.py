@@ -12,6 +12,7 @@ compete for the same VRAM.
 
 from __future__ import annotations
 
+import atexit
 import os
 import secrets
 import socket
@@ -28,6 +29,35 @@ _RUN: dict[str, Any] = {}
 _LOCK = threading.RLock()
 _IDLE: threading.Timer | None = None
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _kill_with_parent(proc: subprocess.Popen) -> None:
+    """Windows job object: llama-server dies with ComfyUI even if ComfyUI is killed,
+    so a stopped session cannot leave a model holding gigabytes of RAM and VRAM."""
+    if os.name != "nt":
+        return
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    if "job" not in _RUN_JOB:
+        job = kernel32.CreateJobObjectW(None, None)
+
+        class Limits(ctypes.Structure):
+            _fields_ = [("a", ctypes.c_int64), ("b", ctypes.c_int64), ("LimitFlags", wintypes.DWORD),
+                        ("c", ctypes.c_size_t), ("d", ctypes.c_size_t), ("e", wintypes.DWORD),
+                        ("f", ctypes.c_size_t), ("g", wintypes.DWORD), ("h", wintypes.DWORD)]
+
+        class Extended(ctypes.Structure):
+            _fields_ = [("Basic", Limits), ("io", ctypes.c_uint64 * 6), ("p", ctypes.c_size_t * 4)]
+
+        info = Extended()
+        info.Basic.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        kernel32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))
+        _RUN_JOB["job"] = job
+    kernel32.AssignProcessToJobObject(_RUN_JOB["job"], wintypes.HANDLE(int(proc._handle)))
+
+
+_RUN_JOB: dict[str, Any] = {}
 
 
 def llama_server_exe() -> Path | None:
@@ -136,6 +166,7 @@ def ensure(model: dict[str, Any], *, context: int = 16384) -> dict[str, Any]:
         proc = subprocess.Popen(args, cwd=str(backend or exe.parent), env=env,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                 creationflags=NO_WINDOW)
+        _kill_with_parent(proc)
         _RUN.update(ref=model["ref"], proc=proc, port=port, api_key=api_key, since=time.time())
 
     deadline = time.time() + 180
@@ -155,3 +186,6 @@ def ensure(model: dict[str, Any], *, context: int = 16384) -> dict[str, Any]:
             stop()
             raise RuntimeError(f"{path.name} did not load within 3 minutes (see {log})")
         time.sleep(0.4)
+
+
+atexit.register(stop)

@@ -219,6 +219,7 @@ Open **⚙ Inspector → Settings**. Stored in `user_data/settings.json`.
 | Run timeout | 240 s | A turn is stopped after this long. |
 | Keep alive | 2m | How long a model stays loaded when idle. |
 | Free VRAM before queue | on | Unloads the LLM before a render. |
+| Offload between steps | on | After a run, unloads image models and clears ComfyUI's cache so the reviewer has memory; the vision model leaves memory as soon as it answers. |
 
 ## The in-graph LLM node
 

@@ -196,7 +196,7 @@ function focusNodes(nodes) {
 const S = {
   root: null, status: null, catalogue: null, chatId: null, runId: null,
   turnEl: null, textEl: null, thinkEl: null, activity: null, buffer: "", images: [],
-  view: "chat",
+  view: "chat", afterTurn: [],
 };
 
 // ---------------------------------------------------------------- rendering
@@ -294,13 +294,15 @@ const TOOL_PHASE = {
   use_skill: "plan", system_status: "plan", check_last_run: "review", look_at_output: "review",
   look_at_canvas: "review", queue_run: "run",
 };
-const M = { on: false, goal: "", phase: "plan", note: "", pct: 0, t0: 0, steps: [], timer: null, watching: false, end: "", finishedAt: 0 };
+const M = { on: false, goal: "", phase: "plan", note: "", pct: 0, t0: 0, steps: [], timer: null, watching: false, end: "", finishedAt: 0, tick: 0, mem: "" };
 
 function missionStart(goal) {
   Object.assign(M, { on: true, goal, phase: "plan", note: "Reading your canvas and request", pct: 0,
                      t0: Date.now(), steps: [], watching: false, end: "" });
   clearInterval(M.timer);
-  M.timer = setInterval(missionDraw, 1000);
+  M.timer = setInterval(() => { if (!(++M.tick % 3)) missionMem(); missionDraw(); }, 1000);
+  M.tick = 0;
+  missionMem();
   missionDraw();
 }
 
@@ -322,6 +324,14 @@ function missionEnd(reason) {
   clearInterval(M.timer);
   M.finishedAt = Date.now();
   missionDraw();
+}
+
+async function missionMem() {
+  try {
+    const d = await (await api.fetchApi("/system_stats")).json();
+    const v = d.devices?.[0], gb = (n) => (n / 1e9).toFixed(1);
+    M.mem = `VRAM ${gb(v.vram_total - v.vram_free)}/${gb(v.vram_total)} GB · RAM ${gb(d.system.ram_free)} GB free`;
+  } catch { M.mem = ""; }
 }
 
 function missionDraw() {
@@ -349,7 +359,8 @@ function missionDraw() {
     el("div", { class: "ezag-m-goal", title: M.goal, text: M.goal }),
     stepper,
     el("div", { class: "ezag-m-note", text: live ? M.note : M.end }),
-  ];
+    live && M.mem ? el("div", { class: "ezag-m-mem", text: M.mem }) : null,
+  ].filter(Boolean);
   if (live && M.phase === "run") {
     kids.push(el("div", { class: "ezag-bar" }, [el("div", { class: "ezag-bar-fill", style: `width:${M.pct}%` })]));
   }
@@ -586,13 +597,16 @@ function onEvent(ev) {
       missionEnd(r.proposals.some((p) => !p.auto_apply) ? "Waiting for you: a change needs your click." : "Finished.");
     }
     endTurn();
+    S.afterTurn.splice(0).forEach((f) => f());
     scroll();
   } else if (ev.type === "stopped") {
     S.textEl.append(el("div", { class: "ezag-sub", text: "Stopped." }));
+    S.afterTurn.length = 0;
     missionEnd("Stopped by you.");
     endTurn();
   } else if (ev.type === "error") {
     S.textEl.replaceChildren(el("div", { class: "ezag-error", text: ev.message }));
+    S.afterTurn.length = 0;
     missionEnd("Failed: " + String(ev.message).slice(0, 120));
     endTurn();
   }
@@ -678,7 +692,13 @@ function card(c) {
       status.textContent = `Undo failed: ${e.message}. Use Ctrl+Z.`;
     }
   };
-  if (c.auto_apply) {
+  if (c.auto_apply && c.kind === "queue") {
+    // Wait for the agent's own reply to finish: otherwise the language model reloads
+    // into VRAM while the render is starting and both crawl.
+    S.afterTurn.push(doApply);
+    M.watching = true;
+    status.textContent = "Will start when the agent finishes";
+  } else if (c.auto_apply) {
     setTimeout(doApply, 0);
   } else {
     actions.append(
@@ -701,7 +721,11 @@ function watchRun(box, status, autonomous = false) {
   box.append(gallery);
   const off = [];
   const on = (name, fn) => { api.addEventListener(name, fn); off.push(() => api.removeEventListener(name, fn)); };
-  const done = () => { if (autonomous) M.watching = false; off.forEach((f) => f()); };
+  const done = () => {
+    if (autonomous) M.watching = false;
+    off.forEach((f) => f());
+    call("/free_image_models", {}).catch(() => {});   // hand VRAM and RAM back
+  };
   if (autonomous) { M.watching = true; missionStep("run", "Rendering…"); }
   on("progress", (e) => {
     status.textContent = `Rendering ${e.detail.value}/${e.detail.max}`;
@@ -717,7 +741,7 @@ function watchRun(box, status, autonomous = false) {
   on("execution_success", () => {
     status.textContent = "Finished";
     status.className = "ezag-ok";
-    if (autonomous) { missionStep("review", "Render finished, handing the image to the reviewer"); autoContinue(true); }
+    if (autonomous) { missionStep("review", "Render finished: image models offloaded, handing the image to the reviewer"); autoContinue(true); }
     else box.append(el("div", { class: "ezag-row" }, [el("button", { class: "ezag-btn", text: "Ask the agent to review it",
       onclick: () => send("Look at the result of my last run and tell me honestly how it turned out.") })]));
     done();
@@ -797,7 +821,7 @@ async function renderInspector() {
     ollama_url: txt(s.ollama_url), llama_server_exe: txt(s.llama_server_exe),
     external_llama_url: txt(s.external_llama_url), extra_model_dirs: el("textarea", { rows: 2 }),
     max_rounds: num(s.max_rounds, 1, 20), context_tokens: num(s.context_tokens, 2048, 262144),
-    think: chk(s.think), free_vram_before_queue: chk(s.free_vram_before_queue),
+    think: chk(s.think), free_vram_before_queue: chk(s.free_vram_before_queue), offload_between_steps: chk(s.offload_between_steps),
     allow_remote_hosts: chk(s.allow_remote_hosts),
     max_auto_cycles: num(s.max_auto_cycles, 1, 8), share_canvas_view: chk(s.share_canvas_view),
   };
@@ -808,7 +832,7 @@ async function renderInspector() {
       llama_server_exe: f.llama_server_exe.value, external_llama_url: f.external_llama_url.value,
       extra_model_dirs: f.extra_model_dirs.value.split("\n"), max_rounds: f.max_rounds.value,
       context_tokens: f.context_tokens.value, think: f.think.checked,
-      free_vram_before_queue: f.free_vram_before_queue.checked, allow_remote_hosts: f.allow_remote_hosts.checked,
+      free_vram_before_queue: f.free_vram_before_queue.checked, offload_between_steps: f.offload_between_steps.checked, allow_remote_hosts: f.allow_remote_hosts.checked,
       max_auto_cycles: f.max_auto_cycles.value, share_canvas_view: f.share_canvas_view.checked,
     });
     await refreshStatus();
@@ -837,6 +861,7 @@ async function renderInspector() {
     field("Let the agent see the canvas", f.share_canvas_view, "Sends a screenshot of the canvas with each message (stays on this PC)."),
     field("Max tool rounds", f.max_rounds), field("Context tokens", f.context_tokens),
     field("Show reasoning (slower)", f.think), field("Free VRAM before every run", f.free_vram_before_queue),
+    field("Offload between steps", f.offload_between_steps, "After a run, unload image models and clear ComfyUI's cache; the vision model leaves memory as soon as it has answered."),
     field("Allow model servers on other machines", f.allow_remote_hosts, "Off = local-first: your data never leaves this PC."),
     el("div", { class: "ezag-row" }, [el("button", { class: "ezag-btn primary", text: "Save", onclick: save }),
       el("button", { class: "ezag-btn", text: "Back", onclick: () => show("chat") })]),

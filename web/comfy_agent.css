@@ -137,3 +137,4 @@
 .ezag-m-log { font-size: 11px; }
 .ezag-m-log summary { cursor: pointer; color: var(--ez-muted); }
 .ezag-m-log .ezag-sub { white-space: pre; font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
+.ezag-m-mem { font: 11px "Cascadia Mono", Consolas, monospace; color: var(--ez-muted); }

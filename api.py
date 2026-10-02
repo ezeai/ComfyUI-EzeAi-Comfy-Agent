@@ -205,6 +205,16 @@ def prepare_queue() -> dict[str, Any]:
     return {"ok": True, "freed": providers.unload()}
 
 
+def free_image_models(server) -> dict[str, Any]:
+    """After a run: ask ComfyUI to unload its models and drop its node cache, using the
+    same flags as its own /free route, so the worker applies them between prompts."""
+    if not config.load_settings().get("offload_between_steps", True):
+        return {"ok": True, "freed": False}
+    server.prompt_queue.set_flag("unload_models", True)
+    server.prompt_queue.set_flag("free_memory", True)
+    return {"ok": True, "freed": True}
+
+
 def register_routes(server) -> bool:
     try:
         from aiohttp import web
@@ -244,6 +254,7 @@ def register_routes(server) -> bool:
     routes.post(f"{PREFIX}/stop")(handler(stop))
     routes.post(f"{PREFIX}/revalidate")(handler(revalidate))
     routes.post(f"{PREFIX}/prepare_queue")(handler(lambda b: prepare_queue()))
+    routes.post(f"{PREFIX}/free_image_models")(handler(lambda b: free_image_models(server)))
     routes.post(f"{PREFIX}/save_workflow")(handler(save_workflow))
     routes.post(f"{PREFIX}/unload")(handler(lambda b: {"ok": True, "freed": providers.unload()}))
     routes.get(f"{PREFIX}/memory")(handler(lambda: {"ok": True, "notes": memory.notes()}, takes_body=False))

@@ -37,6 +37,7 @@ DEFAULTS: dict[str, Any] = {
     "keep_alive": "2m",
     "context_tokens": 16384,
     "free_vram_before_queue": True,  # unload the LLM before a render is queued
+    "offload_between_steps": True,   # unload image models after a run, vision model after use
     # Hard limits. Measured: a 4B model degenerated into repetition and
     # generated 8000+ tokens, holding Ollama's only slot so every later
     # request queued behind it.
