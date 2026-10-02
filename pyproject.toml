@@ -1,0 +1,15 @@
+[project]
+name = "comfyui-ezeai-comfy-agent"
+version = "0.1.0"
+description = "A local agent for ComfyUI: builds, edits, runs and reviews workflows with Ollama or llama.cpp models. Inspect, Ask and Autonomous modes."
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.urls]
+Repository = "https://github.com/Ezeai/ComfyUI-EzeAi-Comfy-Agent"
+
+[tool.comfy]
+PublisherId = "YOUR-PUBLISHER-ID"
+DisplayName = "EzeAi Comfy Agent"
+Icon = ""

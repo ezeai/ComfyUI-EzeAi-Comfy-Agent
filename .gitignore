@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+user_data/
+*.gguf
+*.safetensors
+*.log
+.DS_Store
