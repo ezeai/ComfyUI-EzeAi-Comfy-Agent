@@ -237,6 +237,19 @@ class TestToolsAndModes(unittest.TestCase):
         self.assertEqual(ctx.proposals, [])
 
 
+class TestCanvasSummary(unittest.TestCase):
+    def test_missing_nodes_are_listed_first_with_guidance(self):
+        # Regression: a 4B model tried to rewire a not-installed node instead of replacing the workflow.
+        snap = {"nodes": [{"id": 459, "type": "NoSuchQwenNode", "widgets": {}, "inputs": []}]}
+        text = graph_ops.summarize(snap)
+        self.assertIn("MISSING NODES", text.splitlines()[1])
+        self.assertIn("#459", text)
+        self.assertIn("create_*", text)
+
+    def test_healthy_canvas_has_no_missing_line(self):
+        self.assertNotIn("MISSING NODES", graph_ops.summarize(SNAP))
+
+
 class TestPolicy(unittest.TestCase):
     def test_policy_table(self):
         self.assertFalse(policy.auto_apply("edit", "ask"))
@@ -250,11 +263,12 @@ class TestPolicy(unittest.TestCase):
 class TestClaimGuard(unittest.TestCase):
     def test_action_claims_are_detected(self):
         """Regression: "I've saved the current canvas" with no tool called."""
-        for text in ("I've saved the current canvas.", "Done. I set steps to 30.", "I added a LoRA."):
+        for text in ("I've saved the current canvas.", "Done. I set steps to 30.", "I added a LoRA.",
+                     "I've prepared a fix card."):  # only checked when no card exists
             self.assertTrue(_CLAIM.search(text), text)
 
     def test_honest_wording_is_not_flagged(self):
-        for text in ("I've prepared a card that saves it.", "Your workflow saves an image.",
+        for text in ("The card below saves it.", "Your workflow saves an image.",
                      "The run was queued earlier by you."):
             self.assertFalse(_CLAIM.search(text), text)
 

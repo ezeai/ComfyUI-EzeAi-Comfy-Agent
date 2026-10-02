@@ -375,8 +375,15 @@ def summarize(snapshot: dict[str, Any] | None, limit: int = 80) -> str:
                      + (f" \"{title}\"" if title != node.get("type") else "") + mode
                      + (f" | {widgets}" if widgets else "") + (f" | in: {links}" if links else ""))
     problems = completeness(VirtualGraph(snapshot))
-    if problems:
-        lines.append("Problems: " + "; ".join(problems[:8]))
+    missing = [p for p in problems if p.endswith("node type is not installed")]
+    if missing:
+        # Listed first and in full: a 4B model must not try to rewire a node that cannot run.
+        lines.insert(1, "MISSING NODES (cannot run, do not rewire): "
+                     + "; ".join(p.split(": ")[0] for p in missing)
+                     + ". Replace the workflow with a create_* tool, or tell the user which node pack to install.")
+    others = [p for p in problems if p not in missing]
+    if others:
+        lines.append("Problems: " + "; ".join(others[:8]))
     return "\n".join(lines)
 
 

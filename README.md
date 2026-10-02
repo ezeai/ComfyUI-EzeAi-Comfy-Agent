@@ -119,9 +119,12 @@ its address in **Settings → External llama.cpp server URL**, for example
 | Role | Good choices | Why |
 | --- | --- | --- |
 | Agent (plans and calls tools) | Spark 4B, Qwen3 4B Instruct, Qwen3.5 4B/9B | Reliable tool calling, 4 to 10 s per turn on a mid-range GPU. |
+| Fast, small agent | Qwen3.5 2B (Q8) | Measured 3 to 13 s per task and calls tools correctly; less reliable than a 4B on multi-step fixes. |
 | Vision (looks at images and the canvas) | Qwen3.5 4B or 9B | The agent routes image questions here automatically. |
 
 Pick models in **Inspector → Settings → Agent model / Vision model**, or leave on auto.
+
+**Not every GGUF is a chat model.** Scoring or classifier fine-tunes (for example "Decision" models that only output yes/no scores) can't drive the agent even if they report tools. Use a normal instruct/chat model.
 
 **Using a custom or fine-tuned model:** any Ollama model or GGUF that reports the
 `tools` capability will work as the agent. A model that does not support tool calls

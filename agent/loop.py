@@ -31,7 +31,7 @@ import re as _re
 
 _CLAIM = _re.compile(
     r"\b(i'?ve|i have|i)\s+(just\s+)?(saved|added|created|built|changed|updated|set|connected|"
-    r"removed|deleted|queued|run|ran|started|applied|made|replaced|inserted|opened|loaded)\b"
+    r"removed|deleted|queued|run|ran|started|applied|made|replaced|inserted|opened|loaded|prepared|drafted)\b"
     r"|\b(saved|queued|applied) (it|the|your)\b|^\s*done\b",
     _re.I | _re.M)
 HISTORY_TURNS = 8
@@ -114,13 +114,14 @@ class Agent:
             return reply["content"].strip()
         return describe
 
-    def _wrap_up(self, model, messages, settings, why: str) -> str:
+    def _wrap_up(self, model, messages, settings, why: str, has_card: bool = False) -> str:
         """One last turn with no tools: say what was learned and what is needed next."""
         self.emit({"type": "turn_break"})
         messages.append({"role": "user", "content":
                          f"{why} Stop calling tools. In plain text, in under 80 words: say what you found "
-                         "or prepared (mention the pending card if there is one) and ask the user ONE "
-                         "concrete question or give the one next step."})
+                         + ("or prepared (a card IS pending) " if has_card else
+                            "(NO card exists, so do not say you prepared, fixed or changed anything) ")
+                         + "and ask the user ONE concrete question or give the one next step."})
         reply = providers.chat(model, messages, [], cancel=self.cancel,
                                on_delta=lambda kind, text: self.emit({"type": "delta", "kind": kind, "text": text}),
                                options={"think": False, "context": settings["context_tokens"]})
@@ -272,11 +273,21 @@ class Agent:
                 ctx.attached_images.clear()
             if stuck:
                 self.emit({"type": "route", "step": "stuck", "detail": "repeated identical tool calls"})
-                final_text = self._wrap_up(model, messages, settings, "You are repeating the same calls.")
+                final_text = self._wrap_up(model, messages, settings, "You are repeating the same calls.",
+                                           bool(ctx.proposals or ctx.draft_ops))
                 break
         else:
             self.emit({"type": "route", "step": "limit", "detail": f"step limit ({max_rounds}) reached"})
-            final_text = self._wrap_up(model, messages, settings, "You have used all your steps.")
+            final_text = self._wrap_up(model, messages, settings, "You have used all your steps.",
+                                           bool(ctx.proposals or ctx.draft_ops))
+
+        if not final_text and not self.cancel.is_set():
+            # Some models end a turn with tool calls done but no words (or only reasoning).
+            final_text = self._wrap_up(model, messages, settings, "You gave no answer.",
+                                       bool(ctx.proposals or ctx.draft_ops))
+
+        if (mode != "inspect" and not (ctx.proposals or ctx.draft_ops) and _CLAIM.search(final_text)):
+            unverified_claim = True
 
         card = tools.finalize_draft(ctx, _first_line(final_text) or "Edit the workflow")
         if card:

@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-ezeai-comfy-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "A local agent for ComfyUI: builds, edits, runs and reviews workflows with Ollama or llama.cpp models. Inspect, Ask and Autonomous modes."
 license = { file = "LICENSE" }
 readme = "README.md"
