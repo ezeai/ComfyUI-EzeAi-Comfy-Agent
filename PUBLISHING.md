@@ -39,7 +39,7 @@ git init -b main
 git add .
 git status          # check that user_data/ and __pycache__/ are NOT listed
 git commit -m "Add EzeAi Comfy Agent"
-git remote add origin https://github.com/Ezeai/ComfyUI-EzeAi-Comfy-Agent.git
+git remote add origin https://github.com/ezeai/ComfyUI-EzeAi-Comfy-Agent.git
 git push -u origin main
 ```
 

@@ -53,7 +53,7 @@ Open a terminal in your ComfyUI `custom_nodes` folder.
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/Ezeai/ComfyUI-EzeAi-Comfy-Agent.git
+git clone https://github.com/ezeai/ComfyUI-EzeAi-Comfy-Agent.git
 ```
 
 ### Option B: download the zip
